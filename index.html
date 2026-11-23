@@ -358,7 +358,7 @@ html.tb-on,html.tb-on body{overflow:hidden}
 <body>
 <div id="app">
   <div id="menubar">
-    <div id="brand">Fret<span>Lab</span> <span class="badge">beta 0.8</span></div>
+    <div id="brand">Fret<span>Lab</span> <span class="badge">beta 0.8.1</span></div>
     <button id="openBtn" title="Open Guitar Pro, MusicXML, or alphaTex file">📂 Open</button>
     <input id="fileInput" type="file" hidden accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.musicxml,.xml,.mxl,.capx,.txt,.atex,.alphatex">
     <button id="samplesBtn">🎸 Lessons</button>
@@ -3379,12 +3379,12 @@ TB.fretboard = (o) => {
   for (let f = from; f <= F; f++) add("line", { x1: xw(f), x2: xw(f), y1: top - 10, y2: top + gap * (S - 1) + 10, class: f === 0 ? "fb-nut" : "fb-fret" });
   for (let s = 1; s <= S; s++){ add("line", { x1: from === 0 ? xw(0) : xw(from), x2: xw(F), y1: y(s), y2: y(s), class: "fb-str", "stroke-width": 0.8 + (S - s) * 0.0 + (s <= 3 ? 1.1 - s * 0.15 : 0.6) });
     add("text", { x: 14, y: y(s) + 4, class: "fb-sname" }, T.nameOf(o.tuning[s - 1], o.flats)); }
-  for (let f = Math.max(1, from); f <= F; f++) if ([1,3,5,7,9,12,15,17,19,21,24].includes(f)) add("text", { x: xn(f), y: H - 6, class: "fb-fnum" }, f);
+  for (let f = Math.max(1, from); f <= F; f++) if (o.allNums || [1,3,5,7,9,12,15,17,19,21,24].includes(f)) add("text", { x: xn(f), y: H - 6, class: "fb-fnum" }, f);
   if (o.onClick){ for (let s = 1; s <= S; s++) for (let f = from; f <= F; f++){ const r = add("rect", { x: f === 0 ? left - 36 : xw(Math.max(from, f - 1)), y: y(s) - gap / 2, width: f === 0 ? 30 : xw(f) - xw(Math.max(from, f - 1)), height: gap, class: "fb-hit" }); r.addEventListener("click", () => o.onClick(s, f)); } }
   (o.marks || []).forEach(m => { if (m.f < from || m.f > F) return; const g = add("g", { class: "fb-m " + (m.cls || "in") }); const c = document.createElementNS(NS, "circle"); c.setAttribute("cx", xn(m.f)); c.setAttribute("cy", y(m.s)); c.setAttribute("r", m.r || 10.5); g.append(c);
     if (m.label != null){ const t = document.createElementNS(NS, "text"); t.setAttribute("x", xn(m.f)); t.setAttribute("y", y(m.s) + 4); t.textContent = m.label; g.append(t); }
     if (o.onMark) { g.style.cursor = "pointer"; g.addEventListener("click", (e) => { e.stopPropagation(); o.onMark(m); }); } });
-  return svg;
+  svg._xw = xw; svg._xn = xn; return svg;
 };
 // SVG → PNG download (fretboard pictures for handouts)
 TB.svgToPng = (svg, name, bg) => {
@@ -3393,6 +3393,19 @@ TB.svgToPng = (svg, name, bg) => {
   const st = document.createElementNS("http://www.w3.org/2000/svg", "style"); st.textContent = css; clone.prepend(st);
   const img = new Image(); img.onload = () => { const c = document.createElement("canvas"); c.width = vb.width * scale; c.height = vb.height * scale; const x = c.getContext("2d"); x.fillStyle = bg || "#1f2329"; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0); c.toBlob(b => TB.download(b, name + ".png")); };
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+};
+// print diagrams (light theme) in a new window
+TB.printNodes = (title, nodes) => {
+  const w = window.open("", "_blank"); if (!w){ TB.toast("Allow pop-ups to print"); return; }
+  const css = [...document.styleSheets].map(ss => { try { return [...ss.cssRules].map(r => r.cssText).filter(t => /\.fb-|\.cd-|\.tb-fb|\.tb-cd/.test(t)).join("\n"); } catch(_){ return ""; } }).join("\n");
+  w.document.write(`<title>${TB.esc(title)}</title><style>${css}
+    body{font:13px system-ui;margin:16px;color:#111} h1{font-size:18px;margin:0 0 10px} .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 18px} .item{break-inside:avoid} .item b{display:block;margin:4px 0}
+    .fb-wood{fill:#fff;stroke:#999}.fb-str{stroke:#555}.fb-fret{stroke:#888}.fb-nut{stroke:#111}.fb-inlay{fill:#ddd}.fb-sname,.fb-fnum{fill:#333}
+    .fb-m.ghost circle{fill:#eee;stroke:#bbb}.fb-m.ghost text{fill:#999}.fb-m.in circle{fill:#fff;stroke:#111;stroke-width:1.6}.fb-m.in text{fill:#111}.fb-m.root circle{fill:#111}.fb-m.root text{fill:#fff}
+    @page{margin:12mm}</style><h1>${TB.esc(title)}</h1>`);
+  const g = w.document.createElement("div"); g.className = "grid"; nodes.forEach(n => g.append(w.document.importNode(n, true))); w.document.body.append(g);
+  w.document.body.append(Object.assign(w.document.createElement("p"), { textContent: "FretLab Toolbox · Scale Shapes · Root notes are filled black." }));
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
 };
 // vertical chord box: frets low→high (-1 muted)
 TB.chordDiagram = (frets, o) => {
@@ -3431,11 +3444,10 @@ function cagedWindow(letter, rootPc, fam){
 function walkPosition(pcs, rootPc, tuning, nps, k){
   const sorted = pcs.map(p => T.mod(p - rootPc)).sort((a, b) => a - b);
   const r0 = T.mod(rootPc - tuning[0]); let start = tuning[0] + r0 + sorted[k % sorted.length]; if (start - tuning[0] > 12) start -= 12;
-  const isIn = m => pcs.includes(T.mod(m)); const out = []; let m = start;
-  for (let s = 0; s < tuning.length; s++){ for (let i = 0; i < nps; i++){ const f = m - tuning[s]; if (f < 0 || f > 24) return out; out.push({ s: s + 1, f, m }); m++; while (!isIn(m)) m++; }
-    // next string: if the next note is lower than the open string, re-start from the next scale note on it
-  }
-  return out;
+  const isIn = m => pcs.includes(T.mod(m));
+  for (let tries = 0; tries < 2; tries++, start += 12){ const out = []; let m = start, ok = true;   // if a shape can't fit near the nut, use it 12 frets up
+    for (let s = 0; s < tuning.length && ok; s++) for (let i = 0; i < nps; i++){ const f = m - tuning[s]; if (f < 0 || f > 24){ ok = false; break; } out.push({ s: s + 1, f, m }); m++; while (!isIn(m)) m++; }
+    if (ok || tries === 1) return out; }
 }
 TB.positions = { cagedWindow, walkPosition };
 
@@ -3673,6 +3685,136 @@ TB.register({ id: "theory", group: "neck", icon: "🧠", name: "Theory Trainer",
     showStats(); next();
   } });
 })();
+
+// ---------- 🧩 Scale Shapes: the 7 three-notes-per-string shapes + the 5 pentatonic shapes ----------
+(function(){
+"use strict";
+const TB = window.fretlabToolbox, T = TB.theory, A = TB.audio, h = TB.h, $ = TB.$, $$ = TB.$$;
+const STD = [40,45,50,55,59,64];
+const MODES = ["Ionian","Dorian","Phrygian","Lydian","Mixolydian","Aeolian","Locrian"];
+const MODE_OF = { major: 0, dorian: 1, phrygian: 2, lydian: 3, mixolydian: 4, minor: 5, locrian: 6 };
+const COLORS = ["#f0a030","#3fa7f5","#4cc38a","#ff4fd8","#8a7dff","#ffd34d","#ff7a45"];
+const PENT_CAGED = ["E","D","C","A","G"];   // minor pentatonic boxes 1–5 sit on the Em, Dm, Cm, Am, Gm chord shapes
+
+TB.register({ id: "shapes", group: "neck", icon: "🧩", name: "Scale Shapes: 3NPS & Pentatonic",
+  desc: "All 7 three-notes-per-string shapes and all 5 pentatonic shapes — one at a time with fingerings, how they connect, a printable chart and a step-by-step practice plan.",
+  mount(el){
+    const st = TB.load("shapes", { sys: "3nps", root: "G", scale3: "major", scaleP: "minpent", rootP: "A", k: 0, labels: "finger", bpm: 80, view: "one" });
+    let playing = null, hot = null;
+    const sysSeg = TB.seg([["3nps","3 notes per string · 7 shapes"],["pent","Pentatonic · 5 shapes"]], st.sys, v => { st.sys = v; st.k = 0; save(); draw(); });
+    const ctl = h("div.tb-row"), picker = h("div.tb-row"), board = h("div.tb-scroll"), map = h("div.tb-scroll"), facts = h("div"), sheet = h("div"), process = h("div");
+    el.append(h("div.tb-row", sysSeg), TB.card(null, ctl, h("div", { style: { marginTop: "8px" } }, picker)), TB.card(null, board, map, facts), process, sheet);
+    const save = () => TB.save("shapes", st);
+    const is3 = () => st.sys === "3nps";
+    const root = () => is3() ? st.root : st.rootP;
+    const scaleKey = () => is3() ? st.scale3 : st.scaleP;
+    const N = () => is3() ? 7 : 5;
+    function cells(k){ const rp = T.pc(root()), pcs = T.scalePcs(rp, scaleKey()); return TB.positions.walkPosition(pcs, rp, STD, is3() ? 3 : 2, ((k % N()) + N()) % N()); }
+    function shapeInfo(k){
+      const c = cells(k), lo = Math.min(...c.map(x => x.f)), hi = Math.max(...c.map(x => x.f)), rp = T.pc(root()), deg = T.SCALES[scaleKey()].deg;
+      const startDeg = deg[T.scalePcs(rp, scaleKey()).indexOf(T.mod(c[0].m))];
+      let name = "Shape " + (k + 1);
+      if (is3() && MODE_OF[scaleKey()] != null) name += " · " + MODES[(MODE_OF[scaleKey()] + k) % 7] + " pattern";
+      if (!is3() && scaleKey() === "minpent") name += " · " + PENT_CAGED[k] + "m chord shape";
+      return { c, lo, hi, name, startDeg, startNote: T.spell(root(), startDeg) };
+    }
+    // fingering: 3NPS by the steps on each string; pentatonic by box position (index finger on the lowest fret)
+    function fingers(c){ const out = new Map(); const byS = {}; c.forEach(x => (byS[x.s] = byS[x.s] || []).push(x)); const lo = Math.min(...c.map(x => x.f));
+      Object.values(byS).forEach(L => { L.sort((a, b) => a.f - b.f);
+        if (L.length === 3){ const d1 = L[1].f - L[0].f, d2 = L[2].f - L[1].f; const f = d1 === 2 && d2 === 1 ? [1,3,4] : [1,2,4]; L.forEach((x, i) => out.set(x, L[0].f === 0 && i === 0 ? "0" : String(f[i]))); }
+        else L.forEach(x => out.set(x, x.f === 0 ? "0" : String(Math.max(1, Math.min(4, x.f - lo + 1 - (lo === 0 ? 0 : 0)))))); });
+      return out; }
+    function labelOf(x, fg){ const rp = T.pc(root()), pcs = T.scalePcs(rp, scaleKey()), deg = T.SCALES[scaleKey()].deg[pcs.indexOf(T.mod(x.m))];
+      return st.labels === "finger" ? fg.get(x) : st.labels === "int" ? deg : st.labels === "name" ? T.spell(root(), deg) : ""; }
+    function drawCtl(){ ctl.innerHTML = "";
+      if (is3()) TB.ap(ctl, TB.field("Key / root", TB.select(T.ROOTS, st.root, v => { st.root = v; save(); draw(); })),
+        TB.field("Scale", TB.select(["major","minor","dorian","phrygian","lydian","mixolydian","locrian","harmminor","melminor"].map(k => [k, T.SCALES[k].name]), st.scale3, v => { st.scale3 = v; save(); draw(); })));
+      else TB.ap(ctl, TB.field("Root", TB.select(T.ROOTS, st.rootP, v => { st.rootP = v; save(); draw(); })), TB.field("Scale", TB.select([["minpent","Minor pentatonic"],["majpent","Major pentatonic"]], st.scaleP, v => { st.scaleP = v; save(); draw(); })));
+      TB.ap(ctl, TB.field("Labels", TB.select([["finger","Fingers (1–4)"],["int","Intervals"],["name","Note names"],["none","Dots"]], st.labels, v => { st.labels = v; save(); draw(); })),
+        TB.field("View", TB.seg([["one","One shape"],["all","Whole neck"]], st.view, v => { st.view = v; save(); draw(); })),
+        TB.field("Tempo", TB.select([50,60,70,80,100,120,140].map(b => [b, b + " bpm (8ths)"]), st.bpm, v => { st.bpm = +v; save(); })));
+      picker.innerHTML = ""; for (let k = 0; k < N(); k++){ const b = h("button", { style: { borderColor: COLORS[k], minWidth: "86px" } }, "Shape " + (k + 1)); if (k === st.k){ b.style.background = COLORS[k]; b.style.color = "#111"; b.style.fontWeight = 700; } b.onclick = () => { st.k = k; save(); draw(); }; picker.append(b); }
+      TB.ap(picker, h("div.tb-grow"), playing ? TB.btn("■ Stop", stop, "tb-stop") : TB.btn("▶ Play shape", () => play([st.k], true), "tb-go", "Up and back down, with a click"),
+        TB.btn("🔗 Connect to next", () => play([st.k, st.k + 1], false), null, "This shape up, the next shape down — the move that links them"),
+        TB.btn("🎼 Make an exercise", () => { const ex = TB.load("ex", {}); Object.assign(ex, { type: is3() ? "scale" : "pent", root: root(), scale: scaleKey(), pos: st.k, pattern: "straight", dur: "8" }); TB.save("ex", ex); TB.open("exercise"); }, null, "Open this shape in the Exercise Generator (sequences, loop, scoring)"));
+    }
+    function drawBoard(){
+      const inf = shapeInfo(st.k), fg = fingers(inf.c), rp = T.pc(root()), pcs = T.scalePcs(rp, scaleKey()), marks = [];
+      const inShape = new Set(inf.c.map(x => x.s + ":" + x.f));
+      const F = st.view === "all" ? 17 : Math.max(inf.hi + 2, 5), from = st.view === "all" ? 0 : Math.max(0, inf.lo - 1);
+      for (let s = 1; s <= 6; s++) for (let f = from; f <= F; f++){ const m = STD[s - 1] + f; if (!pcs.includes(T.mod(m))) continue;
+        const own = inShape.has(s + ":" + f); if (!own && st.view === "one") continue;
+        const x = inf.c.find(c => c.s === s && c.f === f) || { s, f, m };
+        const isRoot = T.mod(m) === rp; let cls = own ? (isRoot ? "root" : "in") : "ghost"; if (hot && hot.s === s && hot.f === f) cls = "hot";
+        marks.push({ s, f, cls, label: own ? labelOf(x, fg) : (st.labels === "none" ? "" : T.spell(root(), T.SCALES[scaleKey()].deg[pcs.indexOf(T.mod(m))])) }); }
+      board.innerHTML = ""; const svg = TB.fretboard({ tuning: STD, frets: F, from, marks, allNums: st.view === "one", width: st.view === "one" ? 760 : 1100, flats: /b/.test(root()) || root() === "F", onMark: m => A.pluck(STD[m.s - 1] + m.f, 0, 1.2), onClick: (s, f) => A.pluck(STD[s - 1] + f, 0, 1.2) });
+      board.append(svg);
+      // shape map: where each shape sits on the neck (click a bar to jump to it)
+      map.innerHTML = ""; if (st.view === "all"){ const NS = "http://www.w3.org/2000/svg", W = 1100, rows = N(), H = rows * 20 + 8, m = document.createElementNS(NS, "svg"); m.setAttribute("viewBox", `0 0 ${W} ${H}`); m.setAttribute("class", "tb-fb"); m.style.maxWidth = W + "px";
+        for (let k = 0; k < rows; k++){ const i = shapeInfo(k); [0, 12].forEach(oct => { const lo = i.lo + oct, hi = i.hi + oct; if (lo > F) return; const x1 = lo === 0 ? svg._xn(0) - 12 : svg._xw(Math.max(0, lo - 1)), x2 = svg._xw(Math.min(F, hi));
+          const r = document.createElementNS(NS, "rect"); r.setAttribute("x", x1); r.setAttribute("y", 4 + k * 20); r.setAttribute("width", Math.max(10, x2 - x1)); r.setAttribute("height", 15); r.setAttribute("rx", 4); r.setAttribute("fill", COLORS[k]); r.setAttribute("opacity", k === st.k ? 1 : 0.45); r.style.cursor = "pointer"; r.addEventListener("click", () => { st.k = k; save(); draw(); }); m.append(r);
+          const t = document.createElementNS(NS, "text"); t.setAttribute("x", x1 + 6); t.setAttribute("y", 15.5 + k * 20); t.setAttribute("fill", "#111"); t.setAttribute("font-size", 11); t.setAttribute("font-weight", 700); t.setAttribute("pointer-events", "none"); t.textContent = "Shape " + (k + 1); m.append(t); }); }
+        TB.ap(map, h("div.tb-muted", { style: { margin: "6px 0 2px 2px" } }, "Shape map — each bar shows the frets a shape covers (they repeat 12 frets higher). Click a bar to select it."), m); }
+      facts.innerHTML = ""; const span = inf.hi - inf.lo;
+      TB.ap(facts, h("div.tb-row", { style: { marginTop: "8px" } }, h("b", { style: { fontSize: "16px", color: COLORS[st.k] } }, inf.name), h("span.tb-pill", "Starts on " + inf.startNote + " (" + inf.startDeg + ") on the low E string"), h("span.tb-pill", "Frets " + inf.lo + "–" + inf.hi + (span >= 5 ? " · stretch!" : "")),
+        h("span.tb-pill", is3() ? "3 notes on every string = 18 notes" : "2 notes on every string = 12 notes"), !is3() && scaleKey() === "majpent" ? h("span.tb-pill", "Same notes as " + T.spell(root(), "6") + " minor pentatonic") : null, !is3() && scaleKey() === "minpent" ? h("span.tb-pill", "Same notes as " + T.spell(root(), "b3") + " major pentatonic") : null));
+    }
+    function drawProcess(){ process.innerHTML = "";
+      if (is3()) TB.ap(process, TB.card("How the 7 three-notes-per-string shapes work",
+        h("ul", h("li", "A major or minor scale has ", h("b", "7 notes"), ". Put ", h("b", "3 on every string"), " and you get 7 shapes — ", h("b", "one starting on each note of the scale"), " on the low E string."),
+          h("li", "Every string uses one of only three finger patterns: ", h("b", "1-2-4"), " (half step, then whole), ", h("b", "1-3-4"), " (whole, then half) or ", h("b", "1-2-4 with a stretch"), " (whole, whole). Turn on ", h("i", "Fingers"), " to see which."),
+          h("li", h("b", "Shapes link like a chain:"), " the 2nd and 3rd notes on each string of Shape N are the 1st and 2nd notes of Shape N+1. Slide up one scale note and you're in the next shape."),
+          h("li", h("b", "Same notes, different start:"), " in G major, Shape 2 starts on A — that's the A Dorian pattern. Learn the shapes once and you know all seven modes."),
+          h("li", "Watch the ", h("b", "G → B string"), ": it's tuned a major 3rd (not a 4th), so the pattern moves up one fret there. FretLab draws it correctly for you."),
+          h("li", "Why bother? The same 3-note grouping on every string makes ", h("b", "alternate picking, legato and speed"), " much more even — it's how many rock and fusion players run scales.")),
+        practicePlan()));
+      else TB.ap(process, TB.card("How the 5 pentatonic shapes work",
+        h("ul", h("li", "The pentatonic scale has ", h("b", "5 notes"), ". With ", h("b", "2 on every string"), " you get 5 shapes (boxes). Shape 1 starts on the ", h("b", "root on the low E string"), "."),
+          h("li", h("b", "They interlock:"), " the higher notes of one box are the lower notes of the next box. After Shape 5, Shape 1 repeats 12 frets higher."),
+          h("li", h("b", "Minor ↔ major:"), " A minor pentatonic and C major pentatonic use the same 5 shapes — only the root (orange) moves. Switch the scale above to see it."),
+          h("li", h("b", "Chord anchors (CAGED):"), " minor pentatonic Shapes 1–5 sit on the ", h("b", "Em, Dm, Cm, Am and Gm"), " chord shapes. Find the chord, and the box is around it."),
+          h("li", "Index finger plays the lowest fret of the box; one finger per fret. On the B string the box shifts up one fret."),
+          h("li", h("b", "Tip:"), " the blues scale is just minor pentatonic + one ‘blue note’ (the b5) — add it to any box.")),
+        practicePlan()));
+    }
+    function practicePlan(){ const steps = [
+        ["Learn it", "Pick one shape. Labels → Fingers. Play it slowly and say the finger numbers.", () => { st.labels = "finger"; st.view = "one"; save(); draw(); }, "Show fingers"],
+        ["Find the roots", "Switch Labels → Intervals. Find every orange root and play root to root.", () => { st.labels = "int"; save(); draw(); }, "Show intervals"],
+        ["Play it in time", "▶ Play shape at 60–70 bpm, then play along. Up and back, no stopping.", () => { st.bpm = 60; save(); play([st.k], true); }, "▶ 60 bpm"],
+        ["Sequence it", "Groups of 3 and 4 make the shape stick. Loop it and use the Speed Trainer.", () => { const ex = TB.load("ex", {}); Object.assign(ex, { type: is3() ? "scale" : "pent", root: root(), scale: scaleKey(), pos: st.k, pattern: "3s", dur: "8" }); TB.save("ex", ex); TB.open("exercise"); }, "🎼 Groups of 3"],
+        ["Connect it", "Play this shape up and the next one down. Repeat until the switch is smooth.", () => play([st.k, st.k + 1], false), "🔗 Connect"],
+        ["Use it", "Improvise in just this shape over a backing track. Land on chord tones.", () => { TB.save("btHandoff", { key: root(), mode: /min|dorian|phrygian|locrian/.test(scaleKey()) ? "minor" : "major", prog: /min|dorian|phrygian|locrian/.test(scaleKey()) ? "i | VII | VI | VII" : "I | V | vi | IV" }); TB.open("backing"); }, "🎛 Backing track"],
+        ["Next shape", "One new shape a week. After all " + N() + ", play the whole neck with Whole neck view.", () => { st.k = (st.k + 1) % N(); save(); draw(); }, "Next →"]];
+      return h("div", h("h3", { style: { margin: "10px 0 6px", fontSize: "14px", color: "#ffd9a0" } }, "Practice process — do these in order"),
+        ...steps.map(([t, d, fn, lbl], i) => h("div.tb-row", { style: { margin: "4px 0", alignItems: "center" } }, h("span.tb-pill", { style: { minWidth: "26px", textAlign: "center", fontWeight: 800 } }, i + 1), h("b", { style: { minWidth: "120px" } }, t), h("span", { style: { flex: 1, minWidth: "240px" } }, d), TB.btn(lbl, fn)))); }
+    function drawSheet(){ sheet.innerHTML = ""; const items = [];
+      for (let k = 0; k < N(); k++){ const inf = shapeInfo(k), fg = fingers(inf.c), rp = T.pc(root()); const from = Math.max(0, inf.lo - 1), F = Math.max(inf.hi + 1, from + 5);
+        const marks = inf.c.map(x => ({ s: x.s, f: x.f, cls: T.mod(x.m) === rp ? "root" : "in", label: labelOf(x, fg) }));
+        const svg = TB.fretboard({ tuning: STD, frets: F, from, marks, allNums: true, width: 420, gap: 22 });
+        items.push(h("div.item", h("b", { style: { color: COLORS[k] } }, inf.name, h("span.tb-muted", "  · starts on " + inf.startNote)), svg)); }
+      const title = (is3() ? root() + " " + T.SCALES[scaleKey()].name + " — 7 three-notes-per-string shapes" : root() + " " + T.SCALES[scaleKey()].name + " — 5 shapes");
+      TB.ap(sheet, TB.card("All " + N() + " shapes at a glance", h("div.tb-row", { style: { marginBottom: "8px" } }, h("span.tb-muted", "Labels follow your choice above (fingers, intervals or notes)."), h("div.tb-grow"),
+          TB.btn("🖨 Print / save as PDF", () => TB.printNodes(title, items.map(n => n.cloneNode(true))), null, "Opens a printable page — choose ‘Save as PDF’ to keep it")),
+        h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(380px,1fr))", gap: "12px" } }, ...items)));
+    }
+    function play(ks, both){ stop(); const step = 30 / st.bpm, t0 = A.now() + 0.25; let seq = [];
+      ks.forEach((k, i) => { const c = shapeInfo(k).c.slice().sort((a, b) => a.m - b.m); if (ks.length > 1){ if (i === 0) seq = seq.concat(c); else seq = seq.concat(c.slice().reverse()); } else seq = seq.concat(c, c.slice(0, -1).reverse()); });
+      if (ks.length > 1){ st.k = ks[0] % N(); }
+      seq.forEach((x, i) => A.pluck(x.m, t0 + i * step, step * 1.7, { vel: 0.7 })); for (let b = 0; b <= Math.ceil(seq.length / 2); b++) A.click(t0 + b * step * 2, b % 4 === 0 ? 2 : 1, "wood", 0.45);
+      let i = 0; const startAt = performance.now() + 250; const nextK = ks.length > 1 ? (ks[1] % N()) : null; const firstLen = ks.length > 1 ? shapeInfo(ks[0]).c.length : Infinity;
+      playing = setInterval(() => { i = Math.floor((performance.now() - startAt) / (step * 1000)); if (i < 0) return; if (i >= seq.length){ stop(); return; }
+        if (nextK != null && i >= firstLen && st.k !== nextK){ st.k = nextK; save(); }
+        hot = seq[i]; drawBoard(); }, 40); drawCtl(); }
+    function stop(){ clearInterval(playing); playing = null; hot = null; TB.stopAll(); drawCtl(); drawBoard(); }
+    function draw(){ sysSeg.set(st.sys); drawCtl(); drawBoard(); drawProcess(); drawSheet(); }
+    this.onSpace = () => playing ? stop() : play([st.k], true);
+    this.onKey = e => { if (e.key === "ArrowRight"){ st.k = (st.k + 1) % N(); save(); draw(); } if (e.key === "ArrowLeft"){ st.k = (st.k + N() - 1) % N(); save(); draw(); } };
+    this.unmount = () => clearInterval(playing);
+    draw();
+  } });
+})();
+// list it right after the Fretboard Navigator
+(function(){ const TB = window.fretlabToolbox, i = TB.tools.findIndex(t => t.id === "shapes"); const t = TB.tools.splice(i, 1)[0]; TB.tools.splice(TB.tools.findIndex(x => x.id === "navigator") + 1, 0, t); })();
 
 // ---------- 🏋️ Practise: Exercise Generator · Metronome & Drums · Strum · Rhythm · Vibrato · Streaks ----------
 (function(){

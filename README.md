@@ -2,7 +2,7 @@
 
 A guitar and bass practice app for students at Allegro Charter School of Music — tab and notation playback, loop and speed trainer, tuner, Game mode, and scored practice recordings.
 
-**🧰 Toolbox (new in 0.8):** Fretboard Navigator · Chord & Key Finder · Theory Trainer · Exercise Generator · Metronome & Drum Machine · Strum Trainer · Rhythm Trainer · Vibrato Trainer · Practice Streaks · Backing Track Creator · Randomiser · Capo & Transpose · Ear Trainer · EQ Trainer · Reference Charts. Click **🧰 Tools** in the top bar.
+**🧰 Toolbox (new in 0.8):** Fretboard Navigator · Scale Shapes (7 three-notes-per-string + 5 pentatonic shapes) · Chord & Key Finder · Theory Trainer · Exercise Generator · Metronome & Drum Machine · Strum Trainer · Rhythm Trainer · Vibrato Trainer · Practice Streaks · Backing Track Creator · Randomiser · Capo & Transpose · Ear Trainer · EQ Trainer · Reference Charts. Click **🧰 Tools** in the top bar.
 
 ## Use it
 - **Online (always the newest version):** https://csauer-allegro.github.io/FretLab/
