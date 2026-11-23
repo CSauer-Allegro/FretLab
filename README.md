@@ -4,7 +4,7 @@ A guitar and bass practice app for students at Allegro Charter School of Music â
 
 ## Use it
 - **Online (always the newest version):** https://csauer-allegro.github.io/FretLab/
-- **Offline copy:** [Download FretLab.html](https://github.com/CSauer-Allegro/FretLab/releases/latest/download/FretLab.html), then open it in Chrome. Download again when your teacher says there's a new version.
+- **Offline copy:** [Download FretLab.html](https://csauer-allegro.github.io/FretLab/download.html), then open it in Chrome. Download again when your teacher says there's a new version.
 
 Works in Chrome, Edge, and Firefox on Chromebooks and laptops. The microphone and camera are only used for the tuner, Game mode feedback, and recordings â€” nothing is uploaded. Recordings stay on your device until you turn them in.
 
